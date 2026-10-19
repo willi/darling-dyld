@@ -98,10 +98,23 @@
 		AMFI_DYLD_OUTPUT_ALLOW_PRINT_VARS = (1 << 4),
 		AMFI_DYLD_OUTPUT_ALLOW_FAILED_LIBRARY_INSERTION = (1 << 5),
 		AMFI_DYLD_OUTPUT_ALLOW_LIBRARY_INTERPOSING = (1 << 6),
+		AMFI_DYLD_OUTPUT_ALLOW_EMBEDDED_VARS = (1 << 7),
 	};
 	extern "C" int amfi_check_dyld_policy_self(uint64_t input_flags, uint64_t* output_flags);
 #ifdef DARLING
-    int amfi_check_dyld_policy_self(uint64_t input_flags, uint64_t* output_flags) { *output_flags = 0x3F; return 0; }
+    // Darling has no AMFI. Darling's own dyld asks with input 0; dyld_sim asks through the syscall helpers with
+    // PROC_IN_SIMULATOR and needs LIBRARY_INTERPOSING for __interpose and EMBEDDED_VARS for LC_DYLD_ENVIRONMENT, which
+    // a developer Mac grants simulator processes. 0x3F predates both bits.
+    int amfi_check_dyld_policy_self(uint64_t input_flags, uint64_t* output_flags)
+    {
+        uint64_t flags = AMFI_DYLD_OUTPUT_ALLOW_AT_PATH | AMFI_DYLD_OUTPUT_ALLOW_PATH_VARS
+            | AMFI_DYLD_OUTPUT_ALLOW_CUSTOM_SHARED_CACHE | AMFI_DYLD_OUTPUT_ALLOW_FALLBACK_PATHS
+            | AMFI_DYLD_OUTPUT_ALLOW_PRINT_VARS | AMFI_DYLD_OUTPUT_ALLOW_FAILED_LIBRARY_INSERTION;
+        if (input_flags & AMFI_DYLD_INPUT_PROC_IN_SIMULATOR)
+            flags |= AMFI_DYLD_OUTPUT_ALLOW_LIBRARY_INTERPOSING | AMFI_DYLD_OUTPUT_ALLOW_EMBEDDED_VARS;
+        *output_flags = flags;
+        return 0;
+    }
 #endif
 #else
 	#include <libamfi.h>
