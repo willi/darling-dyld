@@ -101,7 +101,15 @@
 	};
 	extern "C" int amfi_check_dyld_policy_self(uint64_t input_flags, uint64_t* output_flags);
 #ifdef DARLING
-    int amfi_check_dyld_policy_self(uint64_t input_flags, uint64_t* output_flags) { *output_flags = 0x3F; return 0; }
+    // Darling has no AMFI, so dyld answers for it; dyld_sim asks this same function (through the syscall helpers
+    // below) for every iOS Simulator process, and turns interposing off without ALLOW_LIBRARY_INTERPOSING (bit 6).
+    // On a Mac (taffy-sdk's sim-dyld-policy, run 39179673026: macOS 26.6.2, iOS 26.5), a host process, a program run
+    // by `simctl spawn` and an app launched with SIMCTL_CHILD_DYLD_INSERT_LIBRARIES all apply an inserted library's
+    // __interpose section (bit 6) and honour LC_DYLD_ENVIRONMENT (ALLOW_EMBEDDED_VARS, bit 7), so both are added to
+    // Darling's 0x3F. AMFI's own answer to the host process was 0x3DF (bits 2, 8 and 9 set, bit 5 clear), but on a
+    // runner with SIP disabled, so those bits stay as they were until a Mac with SIP on is read. In the simulator,
+    // bit 5 doesn't matter: dyld_sim allows insert failures whatever AMFI says (rdar://74025454).
+    int amfi_check_dyld_policy_self(uint64_t input_flags, uint64_t* output_flags) { *output_flags = 0xFF; return 0; }
 #endif
 #else
 	#include <libamfi.h>
