@@ -101,15 +101,21 @@
 	};
 	extern "C" int amfi_check_dyld_policy_self(uint64_t input_flags, uint64_t* output_flags);
 #ifdef DARLING
-    // Darling has no AMFI, so dyld answers for it; dyld_sim asks this same function (through the syscall helpers
-    // below) for every iOS Simulator process, and turns interposing off without ALLOW_LIBRARY_INTERPOSING (bit 6).
-    // On a Mac (taffy-sdk's sim-dyld-policy, run 39179673026: macOS 26.6.2, iOS 26.5), a host process, a program run
-    // by `simctl spawn` and an app launched with SIMCTL_CHILD_DYLD_INSERT_LIBRARIES all apply an inserted library's
-    // __interpose section (bit 6) and honour LC_DYLD_ENVIRONMENT (ALLOW_EMBEDDED_VARS, bit 7), so both are added to
-    // Darling's 0x3F. AMFI's own answer to the host process was 0x3DF (bits 2, 8 and 9 set, bit 5 clear), but on a
-    // runner with SIP disabled, so those bits stay as they were until a Mac with SIP on is read. In the simulator,
-    // bit 5 doesn't matter: dyld_sim allows insert failures whatever AMFI says (rdar://74025454).
-    int amfi_check_dyld_policy_self(uint64_t input_flags, uint64_t* output_flags) { *output_flags = 0xFF; return 0; }
+    // Darling has no AMFI, so dyld answers for it, two ways. Darling's own dyld (this file, for a macOS process)
+    // asks with input 0, and keeps 0x3F. dyld_sim asks this same function, through the syscall helpers below, for
+    // every iOS Simulator process with AMFI_DYLD_INPUT_PROC_IN_SIMULATOR, and turns interposing off without
+    // ALLOW_LIBRARY_INTERPOSING (bit 6). On a Mac (taffy-sdk's sim-dyld-policy, run 39179673026: macOS 26.6.2,
+    // iOS 26.5), a program run by `simctl spawn` and an app launched with SIMCTL_CHILD_DYLD_INSERT_LIBRARIES both
+    // apply an inserted library's __interpose section (bit 6) and honour LC_DYLD_ENVIRONMENT (ALLOW_EMBEDDED_VARS,
+    // bit 7), so a simulator process gets both on top of 0x3F. Bit 2 stays: it allows DYLD_SHARED_CACHE_DIR, which
+    // the device's bootstrap sets. AMFI's own answer to a host process there was 0x3DF, but the runner has SIP
+    // disabled, so the bits it alone shows (8 and 9 set, 5 clear) wait for a Mac with SIP on. Bit 5 doesn't matter
+    // to dyld_sim, which allows insert failures whatever AMFI says (rdar://74025454).
+    int amfi_check_dyld_policy_self(uint64_t input_flags, uint64_t* output_flags)
+    {
+        *output_flags = (input_flags & AMFI_DYLD_INPUT_PROC_IN_SIMULATOR) ? 0xFF : 0x3F;
+        return 0;
+    }
 #endif
 #else
 	#include <libamfi.h>
