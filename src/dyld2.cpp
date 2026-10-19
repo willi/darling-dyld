@@ -98,22 +98,21 @@
 		AMFI_DYLD_OUTPUT_ALLOW_PRINT_VARS = (1 << 4),
 		AMFI_DYLD_OUTPUT_ALLOW_FAILED_LIBRARY_INSERTION = (1 << 5),
 		AMFI_DYLD_OUTPUT_ALLOW_LIBRARY_INTERPOSING = (1 << 6),
+		AMFI_DYLD_OUTPUT_ALLOW_EMBEDDED_VARS = (1 << 7),
 	};
 	extern "C" int amfi_check_dyld_policy_self(uint64_t input_flags, uint64_t* output_flags);
 #ifdef DARLING
-    // Darling has no AMFI, so dyld answers for it, two ways. Darling's own dyld (this file, for a macOS process)
-    // asks with input 0, and keeps 0x3F. dyld_sim asks this same function, through the syscall helpers below, for
-    // every iOS Simulator process with AMFI_DYLD_INPUT_PROC_IN_SIMULATOR, and turns interposing off without
-    // ALLOW_LIBRARY_INTERPOSING (bit 6). On a Mac (taffy-sdk's sim-dyld-policy, run 39179673026: macOS 26.6.2,
-    // iOS 26.5), a program run by `simctl spawn` and an app launched with SIMCTL_CHILD_DYLD_INSERT_LIBRARIES both
-    // apply an inserted library's __interpose section (bit 6) and honour LC_DYLD_ENVIRONMENT (ALLOW_EMBEDDED_VARS,
-    // bit 7), so a simulator process gets both on top of 0x3F. Bit 2 stays: it allows DYLD_SHARED_CACHE_DIR, which
-    // the device's bootstrap sets. AMFI's own answer to a host process there was 0x3DF, but the runner has SIP
-    // disabled, so the bits it alone shows (8 and 9 set, 5 clear) wait for a Mac with SIP on. Bit 5 doesn't matter
-    // to dyld_sim, which allows insert failures whatever AMFI says (rdar://74025454).
+    // Darling has no AMFI. Darling's own dyld asks with input 0; dyld_sim asks through the syscall helpers with
+    // PROC_IN_SIMULATOR and needs LIBRARY_INTERPOSING for __interpose and EMBEDDED_VARS for LC_DYLD_ENVIRONMENT, which
+    // a developer Mac grants simulator processes. 0x3F predates both bits.
     int amfi_check_dyld_policy_self(uint64_t input_flags, uint64_t* output_flags)
     {
-        *output_flags = (input_flags & AMFI_DYLD_INPUT_PROC_IN_SIMULATOR) ? 0xFF : 0x3F;
+        uint64_t flags = AMFI_DYLD_OUTPUT_ALLOW_AT_PATH | AMFI_DYLD_OUTPUT_ALLOW_PATH_VARS
+            | AMFI_DYLD_OUTPUT_ALLOW_CUSTOM_SHARED_CACHE | AMFI_DYLD_OUTPUT_ALLOW_FALLBACK_PATHS
+            | AMFI_DYLD_OUTPUT_ALLOW_PRINT_VARS | AMFI_DYLD_OUTPUT_ALLOW_FAILED_LIBRARY_INSERTION;
+        if (input_flags & AMFI_DYLD_INPUT_PROC_IN_SIMULATOR)
+            flags |= AMFI_DYLD_OUTPUT_ALLOW_LIBRARY_INTERPOSING | AMFI_DYLD_OUTPUT_ALLOW_EMBEDDED_VARS;
+        *output_flags = flags;
         return 0;
     }
 #endif
